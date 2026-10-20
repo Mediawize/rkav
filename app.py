@@ -1,0 +1,77 @@
+import re, io
+from datetime import datetime, timedelta
+import pandas as pd
+import streamlit as st
+
+st.set_page_config(page_title='RKAV Kleedkamerplanner',layout='wide')
+st.title('RKAV Volendam — kleedkamerplanner (prototype)')
+st.info('Prototype: controleer de instelbare wedstrijdduur en regels voordat de indeling wordt gebruikt. Niet alle uitzonderingen zijn uit het voorbeeldbestand af te leiden.')
+upload=st.file_uploader('Upload wedstrijdschema (.xlsx)',type='xlsx')
+st.sidebar.header('Planninginstellingen')
+durations={}
+for k,default in [('O8-O10',50),('O11-O12',60),('O13-O15',70),('O16-O19',80),('O20+',90)]:
+ durations[k]=st.sidebar.number_input('Wedstrijdduur '+k+' (min)',30,150,default,5)
+before=st.sidebar.number_input('Omkleedtijd vóór wedstrijd (min)',0,180,30,5)
+after=st.sidebar.number_input('Omkleedtijd na wedstrijd (min)',0,180,30,5)
+allow_sharing=st.sidebar.checkbox('Gebruik gescheiden kooien bij tekort',True)
+rooms={i:([f'{i}A',f'{i}B',f'{i}C',f'{i}D'] if i in (1,2,4,9,10,13,14,17,18,19,21,22) else [f'{i}k1',f'{i}k2']) for i in range(1,24)}
+# Exacte onderverdeling afgeleid uit Blad2 van het voorbeeldbestand.
+rooms={1:['1A','1B','1C','1D'],2:['2A','2B','2C','2D'],3:['3k1','3k2'],4:['4A','4B','4C','4D'],5:['5k1','5k2'],6:['6A','6B'],7:['7k1','7k2'],8:['8k1','8k2'],9:['9A','9B','9C','9D'],10:['10A','10B','10C','10D'],11:['11k1','11k2'],12:['12k1','12k2'],13:['13A','13B','13C','13D'],14:['14A','14B','14C','14D'],15:['15k1','15k2'],16:['16k1','16k2'],17:['17A','17B','17C','17D'],18:['18A','18B','18C','18D'],19:['19A','19B','19C','19D'],20:['20k1','20k2'],21:['21A','21B','21C','21D'],22:['22A','22B','22C','22D'],23:['23']}
+
+def category(team):
+ m=re.search(r'\b(?:JO|MO|O)(\d{1,2})\b',str(team),re.I)
+ if not m:return 'O20+'
+ n=int(m.group(1))
+ return 'O8-O10' if n<=10 else 'O11-O12' if n<=12 else 'O13-O15' if n<=15 else 'O16-O19' if n<=19 else 'O20+'
+def gender(team):
+ t=str(team).upper()
+ return 'M' if re.search(r'\bMO\d+',t) else 'J' if re.search(r'\bJO\d+',t) else 'O'
+def parsed_time(v):
+ if isinstance(v,(float,int)):return datetime(2026,1,1)+timedelta(days=float(v)%1)
+ if hasattr(v,'hour'):return datetime(2026,1,1,v.hour,v.minute)
+ return datetime.strptime(str(v).strip()[:5],'%H:%M').replace(year=2026,month=1,day=1)
+
+def run(df):
+ occupied={r:[] for slots in rooms.values() for r in slots}; result=[]
+ for idx,row in df.iterrows():
+  if pd.isna(row.iloc[2]) or pd.isna(row.iloc[1]):continue
+  start=parsed_time(row.iloc[1]); home=str(row.iloc[2]); away=str(row.iloc[4]); cat=category(home)
+  dur=int(durations[cat]); extra=120 if re.search(r'\bRKAV\s+Volendam\b',home,re.I) else 60 if re.search(r'Volendam\s+(?:2|O23-1)\b',home,re.I) else before
+  begin=start-timedelta(minutes=extra); end=start+timedelta(minutes=dur+after)
+  for role,team in [('Thuis',home),('Uit',away)]:
+   g=gender(team); chosen=None
+   # Eerst een volledig vrije fysieke kamer, daarna pas een gescheiden kooi.
+   for shared in (False,True):
+    if shared and not allow_sharing:continue
+    for room,slots in rooms.items():
+     if (len(slots)>1)!=shared:continue
+     if any(any(begin<e and end>b for b,e,_,_ in occupied[s]) for s in slots):continue
+     chosen=slots[0];break
+    if chosen:break
+   if chosen is None and allow_sharing:
+    for room,slots in rooms.items():
+     for slot in slots:
+      if any(begin<e and end>b for b,e,_,_ in occupied[slot]):continue
+      # Voor de zekerheid mogen jongens en meiden niet gelijktijdig in dezelfde fysieke kamer.
+      other=[x for s in slots for x in occupied[s] if begin<x[1] and end>x[0]]
+      if any(g!='O' and og!='O' and g!=og for _,_,og,_ in other):continue
+      chosen=slot;break
+     if chosen:break
+   if chosen:occupied[chosen].append((begin,end,g,team))
+   result.append({'Excelrij':idx+2,'Tijd':start.strftime('%H:%M'),'Veld':row.iloc[6], 'Rol':role,'Team':team,'Kleedkamer':chosen or 'CONFLICT','Vanaf':begin.strftime('%H:%M'),'Tot':end.strftime('%H:%M'),'Status':'OK' if chosen else 'NIET INDEELBAAR'})
+ return pd.DataFrame(result)
+
+if upload:
+ try:
+  df=pd.read_excel(upload,sheet_name=0)
+  if df.shape[1]<7:st.error('Onvoldoende kolommen. Verwacht: Datum, Tijd, Thuisteam, ..., Uitteam, ..., Veld.');st.stop()
+  result=run(df)
+  st.metric('Teams',len(result));st.metric('Niet ingedeeld',int((result.Status!='OK').sum()))
+  st.caption('Kleedkamers zijn voorlopig automatisch toegewezen. Wijzigingen in de tabel zijn voor controle; een herberekening na handmatig wijzigen is nog niet beschikbaar.')
+  edited=st.data_editor(result,hide_index=True,num_rows='fixed',use_container_width=True)
+  buf=io.BytesIO()
+  with pd.ExcelWriter(buf,engine='xlsxwriter') as writer:
+   edited.to_excel(writer,index=False,sheet_name='Kleedkamerindeling')
+  st.download_button('Download indeling als Excel',buf.getvalue(),'rkav_kleedkamerindeling.xlsx',mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  st.warning('Nog niet geïmplementeerd: scheidsrechterkleedkamers, volledige wedstrijdspecifieke uitzonderingen, validatie van handmatige wijzigingen en een gegarandeerd optimale verdeling. Controle door planner vereist.')
+ except Exception as e:st.error(f'Inlezen/plannen mislukt: {e}')
