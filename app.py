@@ -83,11 +83,36 @@ def run(df):
    result.append({'Excelrij':idx+2,'Tijd':start.strftime('%H:%M'),'Veld':row.iloc[6], 'Rol':role,'Team':team,'Kleedkamer':chosen or 'CONFLICT','Vanaf':begin.strftime('%H:%M'),'Tot':end.strftime('%H:%M'),'Status':'OK' if chosen else 'NIET INDEELBAAR'})
  return pd.DataFrame(result)
 
+# Scheidsrechters worden apart gepland: deze kamers zijn niet beschikbaar voor teams.
+st.sidebar.markdown('### 🧑‍⚖️ Scheidsrechters')
+ref_before=st.sidebar.number_input('Scheidsrechter aanwezig vóór aftrap (min)',0,180,30,5)
+ref_after=st.sidebar.number_input('Scheidsrechter na afloop (min)',0,180,30,5)
+ref_rooms=['SR1','SR2','SR3']
+
+def plan_referees(source):
+    # Eén arbitragegroep per wedstrijd; meerdere officials van één wedstrijd delen een ruimte.
+    occupied={room:[] for room in ref_rooms}
+    assignments=[]
+    for idx,row in source.iterrows():
+        if pd.isna(row.iloc[1]) or pd.isna(row.iloc[2]):
+            continue
+        start=parsed_time(row.iloc[1]); home=str(row.iloc[2]); away=str(row.iloc[4]); cat=category(home)
+        begin=start-timedelta(minutes=int(ref_before))
+        end=start+timedelta(minutes=int(durations[cat])+int(ref_after))
+        chosen=next((room for room in ref_rooms if all(not(begin<e and end>b) for b,e in occupied[room])),None)
+        if chosen: occupied[chosen].append((begin,end))
+        assignments.append({'Excelrij':idx+2,'Tijd':start.strftime('%H:%M'),'Wedstrijd':f'{home} - {away}',
+            'Arbitrage':'Nog in te vullen','Scheidsrechterkamer':chosen or 'CONFLICT',
+            'Vanaf':begin.strftime('%H:%M'),'Tot':end.strftime('%H:%M'),
+            'Status':'OK' if chosen else 'NIET INDEELBAAR'})
+    return pd.DataFrame(assignments)
+
 if upload:
  try:
   df=pd.read_excel(upload,sheet_name=0)
   if df.shape[1]<7:st.error('Onvoldoende kolommen. Verwacht: Datum, Tijd, Thuisteam, ..., Uitteam, ..., Veld.');st.stop()
   result=run(df)
+  referees=plan_referees(df)
   st.markdown('<div class="rkav-section">02 / Resultaat in één oogopslag</div>',unsafe_allow_html=True)
   c1,c2,c3=st.columns(3)
   c1.metric('Teams',len(result))
@@ -99,9 +124,16 @@ if upload:
   buf=io.BytesIO()
   with pd.ExcelWriter(buf,engine='xlsxwriter') as writer:
    edited.to_excel(writer,index=False,sheet_name='Kleedkamerindeling')
-  st.markdown('<div class="rkav-section">04 / Indeling exporteren</div>',unsafe_allow_html=True)
+   ref_edited.to_excel(writer,index=False,sheet_name='Scheidsrechters')
+  st.markdown('<div class="rkav-section">04 / Scheidsrechterkleedkamers</div>',unsafe_allow_html=True)
+  st.caption('Per wedstrijd wordt voorlopig één arbitragegroep ingepland. Vul namen en eventuele bijzonderheden zelf in. Bij overlap krijgt een groep een andere kamer of een conflictmelding.')
+  rc1,rc2=st.columns(2)
+  rc1.metric('Arbitragegroepen',len(referees))
+  rc2.metric('Conflicten arbitrage',int((referees.Status!='OK').sum()))
+  ref_edited=st.data_editor(referees,hide_index=True,num_rows='fixed',use_container_width=True,key='referee_editor')
+  st.markdown('<div class="rkav-section">05 / Indeling exporteren</div>',unsafe_allow_html=True)
   st.download_button('⬇️ Download indeling als Excel',buf.getvalue(),'rkav_kleedkamerindeling.xlsx',mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-  st.warning('Nog niet geïmplementeerd: scheidsrechterkleedkamers, volledige wedstrijdspecifieke uitzonderingen, validatie van handmatige wijzigingen en een gegarandeerd optimale verdeling. Controle door planner vereist.')
+  st.warning('Let op: arbitrage wordt voorlopig per wedstrijd als één groep gepland. Geslacht, individuele scheidsrechters, eventuele gedeelde kamers, volledige uitzonderingen en handmatige wijzigingen worden nog niet automatisch gevalideerd. Controle door planner vereist.')
  except Exception as e:st.error(f'Inlezen/plannen mislukt: {e}')
 
 st.markdown('<div class="rkav-foot">RKAV Volendam · Kleedkamerplanner · Prototype — controleer de indeling vóór publicatie.</div>',unsafe_allow_html=True)
