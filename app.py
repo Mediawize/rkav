@@ -5,25 +5,25 @@ import streamlit as st
 
 st.set_page_config(page_title="RKAV Volendam | Kleedkamerplanner", page_icon="⚽", layout="wide", initial_sidebar_state="expanded")
 st.markdown("""<style>
-:root{--rkav:#f4a900;--ink:#16202b}
-.stApp{background:#f5f7fa;color:var(--ink)}
+:root{--rkav:#f47721;--rkav-dark:#c94d0c;--ink:#202938}
+.stApp{background:linear-gradient(180deg,#fff0e5 0,#fff8f3 260px,#f8f9fb 560px);color:var(--ink)}
 .block-container{max-width:1320px;padding-top:2rem;padding-bottom:4rem}
-[data-testid="stSidebar"]{background:#172434}
-[data-testid="stSidebar"] *{color:#f4f7fb!important}
-[data-testid="stSidebar"] input{color:#172434!important}
-[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p{font-weight:600}
-h1,h2,h3{letter-spacing:-.035em;color:#182333}
-h1{font-size:2.3rem!important}
-[data-testid="stMetric"]{background:white;border:1px solid #e5e9ef;border-radius:14px;padding:20px;box-shadow:0 4px 18px #18233308}
-[data-testid="stFileUploader"]{background:white;border:1px solid #e5e9ef;border-radius:14px;padding:15px}
-.stButton button[kind="primary"],.stDownloadButton button{background:#f4a900!important;color:#16202b!important;border:0!important;border-radius:9px!important;font-weight:750!important;padding:.7rem 1.2rem!important}
-[data-testid="stDataFrame"], [data-testid="stDataEditor"]{border-radius:12px;overflow:hidden}
-.rkav-hero{background:linear-gradient(115deg,#162434 0%,#263b51 78%,#334e67 100%);border-radius:20px;padding:32px 36px;margin-bottom:24px;border-left:7px solid #f4a900;color:white}
-.rkav-kicker{color:#ffc447;font-size:.78rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#ad3d09,#e56816 65%,#f47721)}
+[data-testid="stSidebar"] *{color:#fff!important}
+[data-testid="stSidebar"] input{color:#202938!important}
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p{font-weight:650}
+h1,h2,h3{letter-spacing:-.035em;color:#202938}
+[data-testid="stMetric"]{background:#fff;border:1px solid #ffdcc6;border-top:4px solid #f47721;border-radius:14px;padding:20px;box-shadow:0 5px 20px #8d3b1610}
+[data-testid="stFileUploader"]{background:white;border:2px dashed #f5a16c;border-radius:14px;padding:15px}
+.stButton button[kind="primary"],.stDownloadButton button{background:#ec6718!important;color:white!important;border:0!important;border-radius:9px!important;font-weight:750!important;padding:.7rem 1.2rem!important}
+.stButton button:hover,.stDownloadButton button:hover{border-color:#b94409!important;box-shadow:0 2px 10px #ed6c2d44!important}
+[data-testid="stDataFrame"], [data-testid="stDataEditor"]{border:1px solid #f9d4ba;border-radius:12px;overflow:hidden}
+.rkav-hero{background:linear-gradient(115deg,#ad3c09 0%,#ed6b1a 58%,#ff9944 100%);border-radius:20px;padding:36px;margin-bottom:24px;border-left:8px solid #ffcf9c;box-shadow:0 12px 28px #bb4c1528;color:white}
+.rkav-kicker{color:#fff0dd;font-size:.82rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
 .rkav-hero h1{color:white!important;margin:.5rem 0!important;font-size:2.5rem!important}
-.rkav-hero p{color:#dce4ec;margin:0;font-size:1.03rem}
-.rkav-section{font-size:1.15rem;font-weight:750;color:#172434;margin:1.4rem 0 .65rem}
-.rkav-foot{font-size:.8rem;color:#6a7888;border-top:1px solid #dfe5ec;padding-top:14px;margin-top:32px}
+.rkav-hero p{color:#fff3e8;margin:0;font-size:1.03rem}
+.rkav-section{font-size:1.15rem;font-weight:800;color:#bd4a0b;margin:1.4rem 0 .65rem;padding-left:12px;border-left:4px solid #f47721}
+.rkav-foot{font-size:.8rem;color:#6a7888;border-top:1px solid #f5d5be;padding-top:14px;margin-top:32px}
 </style>""",unsafe_allow_html=True)
 st.markdown("""<div class="rkav-hero"><div class="rkav-kicker">RKAV VOLENDAM · WEDSTRIJDDAG</div><h1>⚽ Kleedkamerplanner</h1><p>Van wedstrijdschema naar een overzichtelijke kleedkamerindeling.</p></div>""",unsafe_allow_html=True)
 st.markdown('<div class="rkav-section">01 / Wedstrijdschema importeren</div>',unsafe_allow_html=True)
