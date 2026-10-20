@@ -54,34 +54,49 @@ def parsed_time(v):
  return datetime.strptime(str(v).strip()[:5],'%H:%M').replace(year=2026,month=1,day=1)
 
 def run(df):
- occupied={r:[] for slots in rooms.values() for r in slots}; result=[]
- for idx,row in df.iterrows():
-  if pd.isna(row.iloc[2]) or pd.isna(row.iloc[1]):continue
-  start=parsed_time(row.iloc[1]); home=str(row.iloc[2]); away=str(row.iloc[4]); cat=category(home)
-  dur=int(durations[cat]); extra=120 if re.search(r'\bRKAV\s+Volendam\b',home,re.I) else 60 if re.search(r'Volendam\s+(?:2|O23-1)\b',home,re.I) else before
-  begin=start-timedelta(minutes=extra); end=start+timedelta(minutes=dur+after)
-  for role,team in [('Thuis',home),('Uit',away)]:
-   g=gender(team); chosen=None
-   # Eerst een volledig vrije fysieke kamer, daarna pas een gescheiden kooi.
-   for shared in (False,True):
-    if shared and not allow_sharing:continue
-    for room,slots in rooms.items():
-     if (len(slots)>1)!=shared:continue
-     if any(any(begin<e and end>b for b,e,_,_ in occupied[s]) for s in slots):continue
-     chosen=slots[0];break
-    if chosen:break
-   if chosen is None and allow_sharing:
-    for room,slots in rooms.items():
-     for slot in slots:
-      if any(begin<e and end>b for b,e,_,_ in occupied[slot]):continue
-      # Voor de zekerheid mogen jongens en meiden niet gelijktijdig in dezelfde fysieke kamer.
-      other=[x for s in slots for x in occupied[s] if begin<x[1] and end>x[0]]
-      if any(g!='O' and og!='O' and g!=og for _,_,og,_ in other):continue
-      chosen=slot;break
-     if chosen:break
-   if chosen:occupied[chosen].append((begin,end,g,team))
-   result.append({'Excelrij':idx+2,'Tijd':start.strftime('%H:%M'),'Veld':row.iloc[6], 'Rol':role,'Team':team,'Kleedkamer':chosen or 'CONFLICT','Vanaf':begin.strftime('%H:%M'),'Tot':end.strftime('%H:%M'),'Status':'OK' if chosen else 'NIET INDEELBAAR'})
- return pd.DataFrame(result)
+    # Veiligheidsregel: een fysieke kleedkamer wordt gedurende een tijdvak
+    # nooit aan twee verschillende teams toegewezen, ook niet via A/B/C/D.
+    # Daardoor delen thuis- en uitteams nooit dezelfde ruimte.
+    occupied = {room: [] for room in rooms}
+    requests = []
+    for idx, row in df.iterrows():
+        if pd.isna(row.iloc[1]) or pd.isna(row.iloc[2]):
+            continue
+        start = parsed_time(row.iloc[1])
+        home = str(row.iloc[2]).strip()
+        away = str(row.iloc[4]).strip()
+        cat = category(home)
+        dur = int(durations[cat])
+        extra = (120 if re.search(r'\bRKAV\s+Volendam\b', home, re.I)
+                 else 60 if re.search(r'Volendam\s+(?:2|O23-1)\b', home, re.I)
+                 else before)
+        begin = start - timedelta(minutes=extra)
+        end = start + timedelta(minutes=dur + after)
+        for role, team in [('Thuis', home), ('Uit', away)]:
+            if not team or team.lower() == 'nan':
+                continue
+            requests.append((idx, row, start, role, team, begin, end))
+    # Tijdvolgorde; meisjes krijgen bij gelijke tijd voorrang, zodat ze niet
+    # onbedoeld als laatste uitvallen. Geen garantie op volledige indeling.
+    requests.sort(key=lambda x: (x[5], 0 if gender(x[4]) == 'M' else 1, x[0]))
+    result = []
+    for idx, row, start, role, team, begin, end in requests:
+        chosen = None
+        for room in rooms:
+            if all(not (begin < used_end and end > used_begin)
+                   for used_begin, used_end, _ in occupied[room]):
+                chosen = room
+                break
+        if chosen is not None:
+            occupied[chosen].append((begin, end, team))
+        result.append({
+            'Excelrij': idx + 2, 'Tijd': start.strftime('%H:%M'),
+            'Veld': row.iloc[6], 'Rol': role, 'Team': team,
+            'Kleedkamer': str(chosen) if chosen is not None else 'NIET INGEDEELD',
+            'Vanaf': begin.strftime('%H:%M'), 'Tot': end.strftime('%H:%M'),
+            'Status': 'OK' if chosen is not None else 'CONFLICT - HANDMATIG OPLOSSEN'
+        })
+    return pd.DataFrame(result)
 
 # Scheidsrechters worden apart gepland: deze kamers zijn niet beschikbaar voor teams.
 st.sidebar.markdown('### 🧑‍⚖️ Scheidsrechters')
@@ -119,8 +134,10 @@ if upload:
   c2.metric('Ingepland',int((result.Status=='OK').sum()))
   c3.metric('Niet ingedeeld',int((result.Status!='OK').sum()))
   st.markdown('<div class="rkav-section">03 / Kleedkamerindeling controleren</div>',unsafe_allow_html=True)
-  st.caption('Kleedkamers zijn voorlopig automatisch toegewezen. Wijzigingen in de tabel zijn voor controle; een herberekening na handmatig wijzigen is nog niet beschikbaar.')
+  st.caption('Veiligheidsmodus: maximaal één team per fysieke kleedkamer tegelijk. A/B/C/D worden niet als losse kamers gebruikt. Conflicten vereisen handmatige oplossing; wijzigingen in de tabel worden niet automatisch gevalideerd.')
   edited=st.data_editor(result,hide_index=True,num_rows='fixed',use_container_width=True)
+  if (result.Status!='OK').any():
+   st.error('NIET PUBLICEREN: één of meer teams hebben geen kleedkamer. Los deze conflicten eerst op. Geen team mag naar de parkeerplaats worden verwezen.')
   st.markdown('<div class="rkav-section">04 / Scheidsrechterkleedkamers</div>',unsafe_allow_html=True)
   st.caption('Per wedstrijd wordt voorlopig één arbitragegroep ingepland. Vul namen en eventuele bijzonderheden zelf in. Bij overlap krijgt een groep een andere kamer of een conflictmelding.')
   rc1,rc2=st.columns(2)
@@ -132,7 +149,7 @@ if upload:
    edited.to_excel(writer,index=False,sheet_name='Kleedkamerindeling')
    ref_edited.to_excel(writer,index=False,sheet_name='Scheidsrechters')
   st.markdown('<div class="rkav-section">05 / Indeling exporteren</div>',unsafe_allow_html=True)
-  st.download_button('⬇️ Download indeling als Excel',buf.getvalue(),'rkav_kleedkamerindeling.xlsx',mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  st.download_button('⬇️ Download concept als Excel',buf.getvalue(),'rkav_kleedkamerindeling_CONCEPT.xlsx',mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   st.warning('Let op: arbitrage wordt voorlopig per wedstrijd als één groep gepland. Geslacht, individuele scheidsrechters, eventuele gedeelde kamers, volledige uitzonderingen en handmatige wijzigingen worden nog niet automatisch gevalideerd. Controle door planner vereist.')
  except Exception as e:st.error(f'Inlezen/plannen mislukt: {e}')
 
