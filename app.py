@@ -3,11 +3,33 @@ from datetime import datetime, timedelta
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title='RKAV Kleedkamerplanner',layout='wide')
-st.title('RKAV Volendam — kleedkamerplanner (prototype)')
-st.info('Prototype: controleer de instelbare wedstrijdduur en regels voordat de indeling wordt gebruikt. Niet alle uitzonderingen zijn uit het voorbeeldbestand af te leiden.')
+st.set_page_config(page_title="RKAV Volendam | Kleedkamerplanner", page_icon="⚽", layout="wide", initial_sidebar_state="expanded")
+st.markdown("""<style>
+:root{--rkav:#f4a900;--ink:#16202b}
+.stApp{background:#f5f7fa;color:var(--ink)}
+.block-container{max-width:1320px;padding-top:2rem;padding-bottom:4rem}
+[data-testid="stSidebar"]{background:#172434}
+[data-testid="stSidebar"] *{color:#f4f7fb!important}
+[data-testid="stSidebar"] input{color:#172434!important}
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p{font-weight:600}
+h1,h2,h3{letter-spacing:-.035em;color:#182333}
+h1{font-size:2.3rem!important}
+[data-testid="stMetric"]{background:white;border:1px solid #e5e9ef;border-radius:14px;padding:20px;box-shadow:0 4px 18px #18233308}
+[data-testid="stFileUploader"]{background:white;border:1px solid #e5e9ef;border-radius:14px;padding:15px}
+.stButton button[kind="primary"],.stDownloadButton button{background:#f4a900!important;color:#16202b!important;border:0!important;border-radius:9px!important;font-weight:750!important;padding:.7rem 1.2rem!important}
+[data-testid="stDataFrame"], [data-testid="stDataEditor"]{border-radius:12px;overflow:hidden}
+.rkav-hero{background:linear-gradient(115deg,#162434 0%,#263b51 78%,#334e67 100%);border-radius:20px;padding:32px 36px;margin-bottom:24px;border-left:7px solid #f4a900;color:white}
+.rkav-kicker{color:#ffc447;font-size:.78rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
+.rkav-hero h1{color:white!important;margin:.5rem 0!important;font-size:2.5rem!important}
+.rkav-hero p{color:#dce4ec;margin:0;font-size:1.03rem}
+.rkav-section{font-size:1.15rem;font-weight:750;color:#172434;margin:1.4rem 0 .65rem}
+.rkav-foot{font-size:.8rem;color:#6a7888;border-top:1px solid #dfe5ec;padding-top:14px;margin-top:32px}
+</style>""",unsafe_allow_html=True)
+st.markdown("""<div class="rkav-hero"><div class="rkav-kicker">RKAV VOLENDAM · WEDSTRIJDDAG</div><h1>⚽ Kleedkamerplanner</h1><p>Van wedstrijdschema naar een overzichtelijke kleedkamerindeling.</p></div>""",unsafe_allow_html=True)
+st.markdown('<div class="rkav-section">01 / Wedstrijdschema importeren</div>',unsafe_allow_html=True)
 upload=st.file_uploader('Upload wedstrijdschema (.xlsx)',type='xlsx')
-st.sidebar.header('Planninginstellingen')
+st.sidebar.markdown('## ⚙️ Planninginstellingen')
+st.sidebar.caption('Stel de tijden en verdelingsregels in.')
 durations={}
 for k,default in [('O8-O10',50),('O11-O12',60),('O13-O15',70),('O16-O19',80),('O20+',90)]:
  durations[k]=st.sidebar.number_input('Wedstrijdduur '+k+' (min)',30,150,default,5)
@@ -66,12 +88,20 @@ if upload:
   df=pd.read_excel(upload,sheet_name=0)
   if df.shape[1]<7:st.error('Onvoldoende kolommen. Verwacht: Datum, Tijd, Thuisteam, ..., Uitteam, ..., Veld.');st.stop()
   result=run(df)
-  st.metric('Teams',len(result));st.metric('Niet ingedeeld',int((result.Status!='OK').sum()))
+  st.markdown('<div class="rkav-section">02 / Resultaat in één oogopslag</div>',unsafe_allow_html=True)
+  c1,c2,c3=st.columns(3)
+  c1.metric('Teams',len(result))
+  c2.metric('Ingepland',int((result.Status=='OK').sum()))
+  c3.metric('Niet ingedeeld',int((result.Status!='OK').sum()))
+  st.markdown('<div class="rkav-section">03 / Kleedkamerindeling controleren</div>',unsafe_allow_html=True)
   st.caption('Kleedkamers zijn voorlopig automatisch toegewezen. Wijzigingen in de tabel zijn voor controle; een herberekening na handmatig wijzigen is nog niet beschikbaar.')
   edited=st.data_editor(result,hide_index=True,num_rows='fixed',use_container_width=True)
   buf=io.BytesIO()
   with pd.ExcelWriter(buf,engine='xlsxwriter') as writer:
    edited.to_excel(writer,index=False,sheet_name='Kleedkamerindeling')
-  st.download_button('Download indeling als Excel',buf.getvalue(),'rkav_kleedkamerindeling.xlsx',mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  st.markdown('<div class="rkav-section">04 / Indeling exporteren</div>',unsafe_allow_html=True)
+  st.download_button('⬇️ Download indeling als Excel',buf.getvalue(),'rkav_kleedkamerindeling.xlsx',mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   st.warning('Nog niet geïmplementeerd: scheidsrechterkleedkamers, volledige wedstrijdspecifieke uitzonderingen, validatie van handmatige wijzigingen en een gegarandeerd optimale verdeling. Controle door planner vereist.')
  except Exception as e:st.error(f'Inlezen/plannen mislukt: {e}')
+
+st.markdown('<div class="rkav-foot">RKAV Volendam · Kleedkamerplanner · Prototype — controleer de indeling vóór publicatie.</div>',unsafe_allow_html=True)
